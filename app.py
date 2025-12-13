@@ -1,24 +1,21 @@
-
 import streamlit as st
 from PIL import Image
-import math
 import google.generativeai as genai
 import anthropic
 from groq import Groq
 import base64
 import io
 
-# --- Helper: Image to Base64 (for Claude/Llama) ---
+# --- Helper: Image to Base64 ---
 def encode_image(image):
     buffered = io.BytesIO()
     image.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-# --- Model Handlers ---
-
+# --- Model API Wrappers ---
 def call_gemini(api_key, image, prompt):
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-pro') # Using Pro for better medical reasoning
+    model = genai.GenerativeModel('gemini-1.5-pro')
     response = model.generate_content([prompt, image])
     return response.text
 
@@ -39,7 +36,6 @@ def call_claude(api_key, image, prompt):
     return message.content[0].text
 
 def call_llama(api_key, image, prompt):
-    # Using Groq for Llama 3.2 Vision (11B or 90B)
     client = Groq(api_key=api_key)
     base64_image = encode_image(image)
     chat_completion = client.chat.completions.create(
@@ -54,7 +50,7 @@ def call_llama(api_key, image, prompt):
     )
     return chat_completion.choices[0].message.content
 
-# --- Main Application ---
+# --- Main Streamlit App ---
 def main():
     st.set_page_config(page_title="Multi-Model ECG Analysis", layout="wide", page_icon="🫀")
     
@@ -65,12 +61,12 @@ def main():
         </style>
     """, unsafe_allow_html=True)
 
-    st.title("🫀 AI-Enhanced ECG Interpretation")
+    st.title("🫀 Hybrid AI ECG Interpretation")
 
     # --- Sidebar ---
     with st.sidebar:
-        st.header("⚙️ Configuration")
-        model_choice = st.selectbox("Choose AI Model", ["Gemini 1.5 Pro", "Claude 3.5 Sonnet", "Llama 3.2 Vision (Groq)"])
+        st.header("⚙️ Settings")
+        model_choice = st.selectbox("Select AI Model", ["Gemini 1.5 Pro", "Claude 3.5 Sonnet", "Llama 3.2 Vision (Groq)"])
         
         api_key = ""
         if "Gemini" in model_choice:
@@ -82,71 +78,83 @@ def main():
 
         st.divider()
         uploaded_file = st.file_uploader("Upload ECG Image", type=['png', 'jpg', 'jpeg'])
-        clinical_context = st.text_area("Clinical Context", "55yo Male, Chest Pain")
+        clinical_context = st.text_area("Clinical Context", "e.g., 60M, Hypertensive, Chest Pain")
 
     if not uploaded_file:
-        st.info("Upload an ECG to start.")
+        st.info("👋 Please upload an ECG image to begin.")
         st.stop()
 
     image = Image.open(uploaded_file)
     col1, col2 = st.columns([1, 1.5])
     
     with col1:
-        st.image(image, use_container_width=True)
+        st.image(image, use_container_width=True, caption="ECG Trace")
 
     with col2:
         findings = {"Context": clinical_context}
         
-        # --- Manual Checklist Steps ---
+        st.header("📝 Manual Findings Checklist")
         
-        # Steps 0-6 (Simplified for brevity, assuming previous logic exists)
-        st.markdown('<div class="step-header">Basic Measurements</div>', unsafe_allow_html=True)
+        # --- Simplified Steps 1-6 ---
+        st.markdown('<div class="step-header">Basic Parameters</div>', unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
             findings['Rate'] = st.number_input("Heart Rate (bpm)", value=75)
-            findings['Rhythm'] = st.selectbox("Rhythm", ["Sinus", "Afib", "A-Flutter", "VT"])
-            findings['Axis'] = st.selectbox("Axis", ["Normal", "LAD", "RAD", "Extreme"])
+            findings['Rhythm'] = st.selectbox("Rhythm", ["Sinus Rhythm", "Sinus Tachycardia", "Sinus Bradycardia", "Atrial Fibrillation", "Atrial Flutter", "VT"])
+            findings['Axis'] = st.selectbox("Axis", ["Normal", "LAD", "RAD", "Extreme Axis"])
         with c2:
             findings['PR'] = st.number_input("PR Interval (ms)", value=160)
             findings['QRS'] = st.number_input("QRS Duration (ms)", value=90)
             findings['QTc'] = st.number_input("QTc (ms)", value=420)
 
-        # --- STEP 7: Updated ST/T Changes ---
+        # --- STEP 7: Detailed ST/T Analysis ---
         st.markdown('<div class="step-header">Step 7: ST Segment & T Waves</div>', unsafe_allow_html=True)
         
-        st_options = ["Normal", "ST Elevation", "ST Depression", "T Inversion", "Hyperacute T"]
-        st_finding = st.multiselect("Select Morphological Changes:", st_options, default=["Normal"])
+        st_options = ["Normal", "ST Elevation", "ST Depression", "T Wave Inversion", "Hyperacute T Waves", "Pathological Q Waves"]
+        st_findings_list = st.multiselect("Select observed morphologies:", st_options, default=["Normal"])
         
-        if "Normal" not in st_finding and len(st_finding) > 0:
+        detailed_st_text = []
+        
+        if "Normal" not in st_findings_list and len(st_findings_list) > 0:
             leads_list = ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
-            affected_leads = st.multiselect(f"Select Leads showing {', '.join(st_finding)}:", leads_list)
-            findings['ST_Status'] = f"{', '.join(st_finding)} in leads {', '.join(affected_leads)}"
+            st.write("### 📍 Localization")
+            for abnormality in st_findings_list:
+                if abnormality != "Normal":
+                    selected_leads = st.multiselect(f"Which leads show **{abnormality}**?", leads_list, key=abnormality)
+                    if selected_leads:
+                        detailed_st_text.append(f"{abnormality} in leads {', '.join(selected_leads)}")
+            
+            findings['ST_Status'] = "; ".join(detailed_st_text) if detailed_st_text else "Abnormalities noted but leads not specified."
         else:
-            findings['ST_Status'] = "Normal ST/T segments"
+            findings['ST_Status'] = "Normal ST segments and T waves throughout."
+
+        st.info(f"**Current ST Summary:** {findings['ST_Status']}")
 
         # --- AI Execution ---
         st.divider()
-        if st.button(f"Analyze with {model_choice}"):
+        if st.button(f"Generate Diagnosis ({model_choice})"):
             if not api_key:
-                st.error("Please provide an API Key.")
+                st.error(f"Please provide the API Key for {model_choice}.")
             else:
                 prompt = f"""
-                Act as an expert Cardiologist. Analyze the attached ECG image and my manual findings.
+                You are an expert Consultant Cardiologist.
                 
-                Patient: {findings['Context']}
-                Manual Findings:
-                - Rate/Rhythm: {findings['Rate']} bpm, {findings['Rhythm']}
-                - Intervals: PR {findings['PR']}, QRS {findings['QRS']}, QTc {findings['QTc']}
+                Patient Context: {findings['Context']}
+                
+                I have performed a manual analysis of the image with these findings:
+                - Rate: {findings['Rate']} bpm
+                - Rhythm: {findings['Rhythm']}
+                - Intervals: PR {findings['PR']}ms, QRS {findings['QRS']}ms, QTc {findings['QTc']}ms
                 - Axis: {findings['Axis']}
                 - ST/T Changes: {findings['ST_Status']}
                 
-                Task:
-                1. Verify my manual ST/T findings against the image.
-                2. Provide a final diagnosis (e.g., STEMI, NSTEMI, Normal, LVH).
-                3. Recommend next steps.
+                Please analyze the attached image and cross-reference with my findings.
+                1. CONFIRM: Do you see the ST/T changes in the leads I described?
+                2. DIAGNOSE: Provide the ECG diagnosis (e.g., Anterolateral STEMI, LVH with Strain).
+                3. PLAN: Suggest immediate clinical next steps.
                 """
                 
-                with st.spinner("Consulting AI Model..."):
+                with st.spinner(f"Sending data to {model_choice}..."):
                     try:
                         result = ""
                         if "Gemini" in model_choice:
@@ -157,6 +165,7 @@ def main():
                             result = call_llama(api_key, image, prompt)
                         
                         st.markdown('<div class="report-box">', unsafe_allow_html=True)
+                        st.markdown(f"### 🤖 Analysis by {model_choice}")
                         st.markdown(result)
                         st.markdown('</div>', unsafe_allow_html=True)
                     except Exception as e:
