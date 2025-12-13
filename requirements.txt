@@ -1,0 +1,9 @@
+streamlit
+Pillow
+google-generativeai
+anthropic
+groq
+pandas
+numpy
+scikit-learn
+tqdm
