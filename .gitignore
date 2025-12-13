@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Environment variables
+.env
+
+# Images/Data (Do not commit patient data)
+*.png
+*.jpg
+*.jpeg
+*.pdf
+ptb-xl/
+
+# Mac OS
+.DS_Store
