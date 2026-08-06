@@ -15,15 +15,17 @@ def encode_image(image):
 # --- Model API Wrappers ---
 def call_gemini(api_key, image, prompt):
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    # gemini-2.0-flash is available on Google AI Studio's free tier and supports vision input.
+    model = genai.GenerativeModel('gemini-2.0-flash')
     response = model.generate_content([prompt, image])
     return response.text
 
 def call_claude(api_key, image, prompt):
     client = anthropic.Anthropic(api_key=api_key)
     base64_image = encode_image(image)
+    # claude-3-5-haiku is Anthropic's lowest-cost model that supports image input.
     message = client.messages.create(
-        model="claude-3-5-sonnet-20240620",
+        model="claude-3-5-haiku-20241022",
         max_tokens=1024,
         messages=[{
             "role": "user",
@@ -46,7 +48,9 @@ def call_llama(api_key, image, prompt):
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
             ]
         }],
-        model="llama-3.2-11b-vision-preview",
+        # llama-3.2-11b-vision-preview was decommissioned by Groq; Llama 4 Scout is the
+        # current free-tier vision model on Groq's platform.
+        model="meta-llama/llama-4-scout-17b-16e-instruct",
     )
     return chat_completion.choices[0].message.content
 
@@ -66,7 +70,7 @@ def main():
     # --- Sidebar ---
     with st.sidebar:
         st.header("⚙️ Settings")
-        model_choice = st.selectbox("Select AI Model", ["Gemini 1.5 Pro", "Claude 3.5 Sonnet", "Llama 3.2 Vision (Groq)"])
+        model_choice = st.selectbox("Select AI Model", ["Gemini 2.0 Flash", "Claude 3.5 Haiku", "Llama 4 Scout (Groq)"])
         
         api_key = ""
         if "Gemini" in model_choice:
